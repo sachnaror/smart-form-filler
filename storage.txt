@@ -1,7 +1,0 @@
-{
-  "What is your name?": "Sachin",
-  "Email": "schnaror@gmail.com",
-  "Phone Number": "9560330483",
-  "Job Title": "Sr. Product Manager",
-  "LinkedIn": "https://linkedin.com/in/sachnar"
-}

@@ -15,6 +15,9 @@
             ]
         }
     ],
+    "host_permissions": [
+        "http://localhost:3000/*"
+    ],
     "manifest_version": 3,
     "name": "Smart Form Filler",
     "permissions": [
@@ -22,5 +25,5 @@
         "storage",
         "scripting"
     ],
-    "version": "1.0"
+    "version": "1.1"
 }
