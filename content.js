@@ -6,7 +6,7 @@ chrome.storage.local.get("formCache", (result) => {
     cache = result.formCache || {};
 });
 
-// Load stored question-answer data
+// Load stored question-answer data from JSON
 fetch(chrome.runtime.getURL("storage.txt"))
     .then(response => response.json())
     .then(async data => {
@@ -15,38 +15,33 @@ fetch(chrome.runtime.getURL("storage.txt"))
             .map(el => el.labels?.[0]?.textContent?.trim() || el.placeholder?.trim())
             .filter(label => label);
 
-        // Check cache first
-        const unmatchedLabels = [];
-        labels.forEach(label => {
-            if (cache[label]) {
-                // Set cached value
-                const el = document.querySelector(`[placeholder='${label}']`);
-                if (el) el.value = cache[label];
-            } else {
-                unmatchedLabels.push(label);
-            }
-        });
+        const missingFields = [];
 
-        // Query OpenAI for unmatched labels
-        if (unmatchedLabels.length > 0) {
-            const matches = await getBestMatches(unmatchedLabels, data);
-            matches.forEach(({ label, answer }) => {
-                cache[label] = answer;
+        // Attempt to fill form fields using cache or OpenAI matching
+        for (const label of labels) {
+            let answer = cache[label] || data[label];
+            if (!answer) {
+                answer = await getBestMatch(label, data);
+            }
+            if (answer) {
                 const el = document.querySelector(`[placeholder='${label}']`);
                 if (el) el.value = answer;
-            });
-            chrome.storage.local.set({ formCache: cache });
+            } else {
+                missingFields.push({ label, element: el });
+            }
         }
 
-        // Trigger the modal for confirmation
-        showConfirmationModal();
+        // Prompt user for missing fields
+        if (missingFields.length > 0) {
+            getUserInputsForMissingFields(missingFields, data);
+        }
     })
     .catch(error => console.error("Error loading data:", error));
 
-// Batch process OpenAI matching
-async function getBestMatches(labels, data) {
+// Fetch the best match for a given label using OpenAI
+async function getBestMatch(labelText, data) {
     const questions = Object.keys(data);
-    const prompt = `For each of these labels: ${labels.join(", ")}, match with one of these questions: ${questions.join(", ")}. Respond with pairs of label-question matches.`;
+    const prompt = `Match this label: "${labelText}" to one of these questions: ${questions.join(", ")}. Respond with the closest match.`;
 
     const response = await fetch("https://api.openai.com/v1/completions", {
         method: "POST",
@@ -57,7 +52,7 @@ async function getBestMatches(labels, data) {
         body: JSON.stringify({
             model: "gpt-3.5-turbo",
             prompt: prompt,
-            max_tokens: 150,
+            max_tokens: 50,
             n: 1,
             stop: null,
             temperature: 0
@@ -65,34 +60,35 @@ async function getBestMatches(labels, data) {
     });
 
     const completion = await response.json();
-    return parseMatches(completion.choices[0].text.trim(), data);
+    const matchedQuestion = completion.choices[0].text.trim();
+    return data[matchedQuestion] || null;
 }
 
-function parseMatches(responseText, data) {
-    const matchPairs = [];
-    const pairs = responseText.split("\n");
-    pairs.forEach(pair => {
-        const [label, matchedQuestion] = pair.split(":").map(item => item.trim());
-        if (data[matchedQuestion]) {
-            matchPairs.push({ label, answer: data[matchedQuestion] });
+// Function to handle missing fields and save new data
+function getUserInputsForMissingFields(missingFields, data) {
+    missingFields.forEach(field => {
+        const { label, element } = field;
+        const userAnswer = prompt(`Please enter the answer for "${label}":`);
+        if (userAnswer) {
+            element.value = userAnswer;
+            data[label] = userAnswer;
+            cache[label] = userAnswer;
+
+            // Save to chrome storage and update storage.txt for future use
+            chrome.storage.local.set({ formCache: cache });
+            saveToJSONFile(data);
         }
     });
-    return matchPairs;
 }
 
-// Function to show confirmation modal
-function showConfirmationModal() {
-    const modal = document.createElement("div");
-    modal.id = "formFillModal";
-    modal.innerHTML = `
-    <div class="modal-content">
-      <p>Form filled successfully!</p>
-      <button id="closeModal">Close</button>
-    </div>
-  `;
-    document.body.appendChild(modal);
-
-    document.getElementById("closeModal").addEventListener("click", () => {
-        modal.remove();
-    });
+// Save updated data to JSON
+function saveToJSONFile(data) {
+    const fileData = JSON.stringify(data, null, 2);
+    const blob = new Blob([fileData], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'storage.txt';
+    a.click();
+    URL.revokeObjectURL(url);
 }
