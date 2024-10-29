@@ -1,0 +1,26 @@
+{
+    "action": {
+        "default_popup": "popup.html"
+    },
+    "background": {
+        "service_worker": "background.js"
+    },
+    "content_scripts": [
+        {
+            "js": [
+                "content.js"
+            ],
+            "matches": [
+                "<all_urls>"
+            ]
+        }
+    ],
+    "manifest_version": 3,
+    "name": "Smart Form Filler",
+    "permissions": [
+        "activeTab",
+        "storage",
+        "scripting"
+    ],
+    "version": "1.0"
+}
